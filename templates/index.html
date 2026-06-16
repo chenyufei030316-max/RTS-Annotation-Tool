@@ -1,0 +1,1922 @@
+{% csrf_token %}
+<script>window._USER_EMAIL = "{{ request.session.email|default:'' }}";</script>
+{% verbatim %}<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>RTS Annotation Tool</title>
+<script src="/static/js/vue.global.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; font-size: 13px; overflow: hidden; }
+#app { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100vh; }
+
+.topbar {
+  background: #161b22; border-bottom: 1px solid #30363d;
+  padding: 8px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.topbar h1 { font-size: 14px; font-weight: 700; color: #f0f6fc; white-space: nowrap; }
+.ctrl-group { display: flex; align-items: center; gap: 5px; color: #8b949e; font-size: 12px; }
+.ctrl-group input[type=range] { width: 70px; accent-color: #58a6ff; }
+.btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.btn:hover { border-color: #58a6ff; color: #58a6ff; }
+.btn-green { background: #238636; color: white; border-color: #238636; }
+.btn-green:hover { background: #2ea043; color: white; border-color: #2ea043; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8b949e; }
+.topbar-right input[type=number] { width: 80px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 7px; border-radius: 6px; font-size: 12px; }
+
+.main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+/* 左侧 */
+.left-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 8px; gap: 6px; min-width: 0; min-height: 0; }
+
+/* 缩略图 */
+.thumb-row { display: flex; gap: 5px; flex-shrink: 0; }
+.thumb-card {
+  flex: 1; position: relative; border-radius: 5px; overflow: hidden;
+  border: 2px solid #30363d; cursor: pointer; transition: border-color 0.15s; min-width: 0;
+}
+.thumb-card:hover { border-color: #8b949e; }
+.thumb-card.active { border-color: #58a6ff; }
+.thumb-card.has-seg { border-color: #3fb950; }
+.thumb-card img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; background: #0d1117; }
+.thumb-label {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.7); text-align: center;
+  font-size: 10px; font-weight: 600; padding: 2px 0; color: #f0f6fc;
+}
+.thumb-card.active .thumb-label { color: #58a6ff; }
+.thumb-card.has-seg .thumb-label { color: #3fb950; }
+.seg-count {
+  position: absolute; top: 3px; right: 3px;
+  background: #3fb950; color: white; font-size: 9px; font-weight: 700;
+  padding: 1px 4px; border-radius: 8px;
+}
+
+/* 大图 */
+.big-wrap { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.big-img-area {
+  flex: 1; min-width: 0; min-height: 0;
+  background: #161b22; border-radius: 8px; border: 2px solid #30363d;
+  overflow: hidden; position: relative;
+}
+.big-img-area canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.big-label {
+  position: absolute; top: 8px; left: 8px;
+  background: rgba(0,0,0,0.75); color: #58a6ff;
+  font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; pointer-events: none;
+}
+.big-loading {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #f0f6fc;
+}
+.mode-hint {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.75); color: #8b949e; font-size: 11px;
+  padding: 3px 12px; border-radius: 20px; white-space: nowrap; pointer-events: none;
+}
+
+/* 缩放工具栏 */
+.zoom-bar {
+  display: flex; align-items: center; gap: 6px;
+  background: #161b22; border: 1px solid #30363d;
+  border-radius: 20px; padding: 4px 12px; font-size: 12px;
+  color: #3fb950; font-weight: 700; user-select: none;
+}
+.zoom-bar button {
+  background: none; border: none; color: #3fb950; cursor: pointer;
+  font-size: 16px; font-weight: 700; padding: 0 2px; line-height: 1;
+}
+.zoom-bar button:hover { color: #58a6ff; }
+.zoom-bar .zoom-pct { min-width: 44px; text-align: center; }
+.zoom-lock { cursor: pointer; font-size: 14px; opacity: 0.8; }
+.zoom-lock:hover { opacity: 1; }
+
+/* RTS实例工具栏 */
+.rts-bar {
+  position: absolute; top: 8px; right: 8px;
+  display: flex; gap: 4px; flex-wrap: wrap; max-width: 50%; justify-content: flex-end;
+}
+.rts-chip {
+  padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;
+  border: 2px solid; cursor: pointer; transition: all 0.15s; background: rgba(0,0,0,0.7);
+}
+.rts-chip.active { background: rgba(0,0,0,0.9); }
+.rts-add {
+  padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;
+  border: 2px dashed #484f58; color: #8b949e; cursor: pointer; background: rgba(0,0,0,0.7);
+}
+.rts-add:hover { border-color: #58a6ff; color: #58a6ff; }
+
+/* 右侧面板 */
+.right-panel {
+  width: 280px; background: #161b22; border-left: 1px solid #30363d;
+  padding: 10px; overflow-y: auto; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  align-self: stretch;
+}
+.panel-label { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin-bottom: 4px; }
+
+.progress-bar { background: #21262d; border-radius: 4px; height: 5px; overflow: hidden; margin-bottom: 4px; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #238636, #3fb950); transition: width 0.3s; }
+.stat-row { display: flex; gap: 4px; }
+.stat-chip { flex: 1; text-align: center; padding: 4px 2px; border-radius: 5px; font-size: 10px; border: 1px solid #30363d; background: #21262d; }
+.stat-chip .num { font-size: 14px; font-weight: 700; display: block; }
+.stat-chip.yes .num { color: #3fb950; }
+.stat-chip.no .num { color: #f85149; }
+.stat-chip.unk .num { color: #a371f7; }
+.stat-chip .lbl { color: #8b949e; }
+
+.vbtn-row { display: flex; gap: 4px; }
+.vbtn { flex: 1; padding: 6px 4px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #8b949e; cursor: pointer; font-size: 12px; font-weight: 600; text-align: center; transition: all 0.15s; }
+.vbtn:hover { border-color: #58a6ff; }
+.vbtn.yes.active { background: #0f2d1a; border-color: #3fb950; color: #3fb950; }
+.vbtn.no.active { background: #2d0f0f; border-color: #f85149; color: #f85149; }
+.vbtn.unk.active { background: #1c1c2d; border-color: #a371f7; color: #a371f7; }
+
+.tool-row { display: flex; gap: 4px; }
+.tbtn { flex: 1; padding: 6px 4px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #8b949e; cursor: pointer; font-size: 11px; text-align: center; transition: all 0.15s; }
+.tbtn.active { background: #0d419d; border-color: #58a6ff; color: #58a6ff; }
+.tbtn.edit-active { background: #2d1f00; border-color: #f0883e; color: #f0883e; }
+
+/* 三模式选择器 */
+.mode-selector { display: flex; gap: 0; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+.mode-btn { flex: 1; padding: 7px 4px; border: none; background: #21262d; color: #8b949e; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; transition: all 0.15s; border-right: 1px solid #30363d; }
+.mode-btn:last-child { border-right: none; }
+.mode-btn.sam-active { background: #0d419d; color: #58a6ff; }
+.mode-btn.manual-active { background: #2d1f00; color: #f0883e; }
+.mode-btn.mouse-active { background: #1a2d1a; color: #3fb950; }
+
+.year-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.year-item { display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 3px 6px; border-radius: 4px; cursor: pointer; border: 1px solid transparent; }
+.year-item.active { background: #0d419d22; border-color: #58a6ff44; }
+
+.note-area { width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; padding: 7px; font-size: 12px; resize: none; height: 60px; font-family: inherit; }
+.note-area:focus { outline: none; border-color: #58a6ff; }
+
+.action-row { display: flex; gap: 4px; }
+.abtn { flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; }
+.abtn-save { background: #238636; color: white; }
+.abtn-save:hover { background: #2ea043; }
+.abtn-skip { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+.abtn-skip:hover { border-color: #8b949e; color: #c9d1d9; }
+.nav-row { display: flex; gap: 4px; }
+.nbtn { flex: 1; padding: 6px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #8b949e; cursor: pointer; font-size: 12px; text-align: center; }
+.nbtn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+.divider { border: none; border-top: 1px solid #21262d; }
+.check-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #c9d1d9; cursor: pointer; }
+.check-row input { accent-color: #58a6ff; }
+.spinner { width: 18px; height: 18px; border: 2px solid #444; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 顶部栏 -->
+  <div class="topbar">
+    <h1>RTS Annotation Tool</h1>
+    <div class="ctrl-group">
+      Opacity <input type="range" v-model.number="opacity" min="0.1" max="1" step="0.05">
+      <span style="color:#f0f6fc;width:26px">{{ opacity }}</span>
+    </div>
+    <label class="check-row ctrl-group"><input type="checkbox" v-model="showPolygons"> Show outlines</label>
+    <label class="check-row ctrl-group"><input type="checkbox" v-model="fillPolygons"> Fill</label>
+    <label class="check-row ctrl-group"><input type="checkbox" v-model="showNir"> NIR</label>
+    <label class="check-row ctrl-group"><input type="checkbox" v-model="hoverEnabled"> Hover preview</label>
+    <button class="btn btn-green" @click="reloadCell">Reload</button>
+    <button class="btn" @click="undo" :disabled="!canUndo" :style="{opacity: canUndo?1:0.35}">↩ Undo</button>
+    <button class="btn" @click="redo" :disabled="!canRedo" :style="{opacity: canRedo?1:0.35}">↪ Redo</button>
+    <div class="topbar-right">
+      <span>{{ cellData ? cellData.order+1 : '-' }} / {{ stats.total }}</span>
+      <input type="number" v-model="jumpInput" placeholder="Jump to #" @keyup.enter="jumpTo">
+      <button class="btn" @click="jumpTo">Go</button>
+      <span style="color:#58a6ff;margin-left:8px">{{ currentUser }}</span>
+      <a href="/logout/" style="text-decoration:none"><button class="btn" style="color:#f85149;border-color:#f85149">Logout</button></a>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- 左侧 -->
+    <div class="left-area">
+
+      <!-- 缩略图一排（6年 + 动图） -->
+      <div class="thumb-row">
+        <div v-for="year in years" :key="year"
+             class="thumb-card"
+             :class="{active: activeYear===year, 'has-seg': instanceCount(year)>0}"
+             @click="activeYear=year; infoPanel.show=(instances[year]||[]).length>0"
+             style="position:relative">
+          <img :src="getUrl(year)" :alt="'s2_'+year" @load="redrawThumb(year)">
+          <canvas :ref="el => { if(el) thumbCanvases[year]=el }"
+                  style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></canvas>
+          <div class="seg-count" v-if="instanceCount(year)>0">{{ instanceCount(year) }}</div>
+          <div class="thumb-label">{{ year }}</div>
+        </div>
+        <div class="thumb-card" style="cursor:default;border-color:#30363d">
+          <img v-if="gifUrl" :src="gifUrl" style="width:100%;aspect-ratio:1;object-fit:contain;display:block;background:#0d1117">
+          <div v-else style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:#484f58;background:#0d1117">GIF</div>
+          <div class="thumb-label" style="color:#a371f7">GIF</div>
+        </div>
+      </div>
+
+      <!-- 大图区域 + 右侧信息浮层 -->
+      <div class="big-wrap" style="position:relative">
+        <div class="big-img-area"
+             ref="bigArea"
+             @mousemove="onMouseMove"
+             @mouseleave="onMouseLeave"
+             @mousedown="onMouseDown"
+             @mouseup="onMouseUp"
+             @click="onBigClick"
+             @dblclick="onDblClick"
+             @contextmenu.prevent="onRightClick"
+             @wheel.prevent="onWheel">
+          <!-- img仅用于加载，隐藏但保持可用 -->
+          <img :src="getUrl(activeYear)" @load="onBigLoad" ref="bigImg" :key="activeYear+(showNir?'nir':'s2')"
+               style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px">
+          <canvas ref="bigCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>
+          <!-- 缩放工具栏：悬浮在容器左下角 -->
+          <div class="zoom-bar" style="position:absolute;bottom:44px;left:10px;z-index:15">
+            <button @click.stop="zoomOut">−</button>
+            <span class="zoom-pct">{{ Math.round(zoomLevel*100) }}%</span>
+            <span class="zoom-lock" @click.stop="zoomLocked=!zoomLocked" :title="zoomLocked?'Unlock':'Lock'">
+              {{ zoomLocked ? '🔒' : '🔓' }}
+            </span>
+            <button @click.stop="zoomIn">+</button>
+            <button @click.stop="zoomReset" style="font-size:11px;font-weight:700;letter-spacing:0.5px">RESET</button>
+          </div>
+
+          <!-- RTS实例选择器 -->
+          <div class="rts-bar">
+            <div v-for="inst in currentInstances" :key="inst.id"
+                 class="rts-chip"
+                 :class="{active: activeInstId===inst.id}"
+                 :style="{color: inst.color, borderColor: inst.color}"
+                 @click.stop="activeInstId=inst.id">
+              {{ inst.id }}
+              <span @click.stop="deleteInstById(inst.id)" style="margin-left:4px;opacity:0.7">×</span>
+            </div>
+            <div class="rts-add" @click.stop="addInstance">+ New RTS</div>
+          </div>
+
+          <div class="big-label">S2 {{ activeYear }}</div>
+
+          <div v-if="segmenting" class="big-loading">
+            <div class="spinner"></div> SAM segmenting...
+          </div>
+
+          <div class="mode-hint">
+            <template v-if="mainMode==='manual'">
+              ✏ Manual — click to add vertex / dblclick to close / Esc cancel
+            </template>
+            <template v-else-if="mainMode==='mouse'">
+              🖱 Mouse — click region / drag vertex / dblclick to delete
+            </template>
+            <template v-else>
+              🤖 SAM — {{ tool==='fg' ? 'FG point' : 'BG point' }} &nbsp;|&nbsp; F=FG B=BG S=Save Space=Skip
+            </template>
+          </div>
+        </div>
+
+        <!-- 左侧固定任务卡 -->
+        <div v-if="infoPanel.show"
+             style="position:absolute;top:8px;left:8px;width:192px;background:#161b22;
+                    border:1px solid #30363d;border-radius:8px;font-size:12px;
+                    zIndex:20;box-shadow:0 4px 16px rgba(0,0,0,0.5);user-select:none;
+                    max-height:calc(100% - 16px);overflow-y:auto">
+          <!-- 面板标题 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;
+                      padding:8px 10px;border-bottom:1px solid #21262d;position:sticky;top:0;
+                      background:#161b22;z-index:1">
+            <span style="color:#8b949e;font-size:11px;font-weight:600">RTS Instances</span>
+            <span style="cursor:pointer;color:#484f58;font-size:16px;line-height:1"
+                  @click="infoPanel.show=false">×</span>
+          </div>
+          <!-- 实例列表 -->
+          <div v-for="inst in currentInstances" :key="inst.id">
+            <!-- 实例标题行：点击折叠/展开 -->
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        padding:7px 10px;cursor:pointer;border-bottom:1px solid #21262d"
+                 :style="{background: activeInstId===inst.id ? '#0d1117' : 'transparent'}"
+                 @click.stop="activeInstId=inst.id; inst._collapsed=!inst._collapsed">
+              <span style="font-weight:700;display:flex;align-items:center;gap:4px"
+                    :style="{color: inst.color}">
+                {{ inst.id }}
+                <span v-if="inst.confirmed" style="color:#3fb950;font-size:10px">✓</span>
+              </span>
+              <span style="color:#484f58;font-size:10px">{{ inst._collapsed ? '▶' : '▼' }}</span>
+            </div>
+            <!-- 折叠内容 -->
+            <div v-if="!inst._collapsed" style="padding:8px 10px;display:flex;flex-direction:column;
+                                                  gap:6px;border-bottom:1px solid #21262d">
+              <div style="display:flex;justify-content:space-between">
+                <span style="color:#8b949e">Year</span>
+                <span style="color:#f0f6fc">{{ activeYear }}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span style="color:#8b949e">Area</span>
+                <span style="color:#f0f6fc;font-weight:600">
+                  {{ instArea(inst) >= 10000 ? (instArea(inst)/10000).toFixed(2)+' ha' : instArea(inst)+' m²' }}
+                </span>
+              </div>
+              <div>
+                <div style="color:#8b949e;margin-bottom:3px">ID</div>
+                <input :value="inst.id"
+                       @change="e => { inst.id = e.target.value }"
+                       style="width:100%;background:#21262d;border:1px solid #30363d;color:#f0f6fc;
+                              padding:4px 7px;border-radius:5px;font-size:12px;box-sizing:border-box">
+              </div>
+              <div>
+                <div style="color:#8b949e;margin-bottom:3px">Note</div>
+                <textarea v-model="inst.note"
+                          style="width:100%;background:#21262d;border:1px solid #30363d;color:#f0f6fc;
+                                 padding:4px 7px;border-radius:5px;font-size:11px;resize:none;
+                                 height:46px;font-family:inherit;box-sizing:border-box"></textarea>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:2px">
+                <button @click.stop="deleteInstById(inst.id)"
+                        style="flex:1;padding:5px;border-radius:6px;border:1px solid #da3633;
+                               background:transparent;color:#da3633;font-size:12px;font-weight:600;cursor:pointer">
+                  Delete
+                </button>
+                <button @click.stop="inst.polygon?.length ? confirmInstById(inst.id) : null"
+                        :style="{flex:1,padding:'5px',borderRadius:'6px',border:'none',
+                                 background:inst.polygon?.length ? '#238636' : '#333',
+                                 color:inst.polygon?.length ? 'white' : '#666',
+                                 fontSize:'13px',fontWeight:'700',
+                                 cursor:inst.polygon?.length ? 'pointer' : 'not-allowed'}">
+                  ✓
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 右侧面板 -->
+    <div class="right-panel">
+
+      <!-- 进度 -->
+      <div>
+        <div class="panel-label">Progress {{ progressPct }}%</div>
+        <div class="progress-bar"><div class="progress-fill" :style="{width:progressPct+'%'}"></div></div>
+        <div class="stat-row">
+          <div class="stat-chip yes"><span class="num">{{ stats.yes||0 }}</span><span class="lbl">Yes</span></div>
+          <div class="stat-chip no"><span class="num">{{ stats.no||0 }}</span><span class="lbl">No</span></div>
+          <div class="stat-chip unk"><span class="num">{{ stats.unknown||0 }}</span><span class="lbl">Unk</span></div>
+        </div>
+        <div style="font-size:10px;color:#484f58;margin-top:3px;text-align:center">Total {{ stats.total }} · Skipped {{ stats.skipped }}</div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- 年份状态 -->
+      <div>
+        <div style="font-size:11px;font-family:monospace;color:#8b949e;margin-bottom:6px;word-break:break-all">{{ cellData ? cellData.cell_id : '' }}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px">
+          <div v-for="year in years" :key="year"
+               class="year-item"
+               :class="{active: activeYear===year}"
+               @click="activeYear=year">
+            <span :style="{color: activeYear===year ? '#58a6ff' : '#8b949e', flexShrink:0}">{{ year }}</span>
+            <span style="font-size:10px;margin-left:4px">
+              <template v-if="instanceCount(year)>0">
+                <span v-for="inst in (instances[year]||[]).filter(i=>i.polygon)" :key="inst.id"
+                      :style="{color: inst.color, marginLeft:'2px'}">{{ inst.id }}</span>
+              </template>
+              <span v-else style="color:#484f58">—</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- 工具模式 -->
+      <div>
+        <div class="panel-label">Tool</div>
+        <div class="mode-selector" style="margin-bottom:8px">
+          <button class="mode-btn" :class="{'sam-active': mainMode==='sam'}" @click="setMode('sam')">
+            🤖 SAM
+          </button>
+          <button class="mode-btn" :class="{'manual-active': mainMode==='manual'}" @click="setMode('manual')">
+            ✏ Manual
+          </button>
+          <button class="mode-btn" :class="{'mouse-active': mainMode==='mouse'}" @click="setMode('mouse')">
+            🖱 Mouse
+          </button>
+        </div>
+
+        <!-- SAM3子工具 -->
+        <template v-if="mainMode==='sam'">
+          <div class="tool-row" style="margin-bottom:5px">
+            <button class="tbtn" :class="{active: tool==='fg'}" @click="tool='fg'">● FG (F)</button>
+            <button class="tbtn" :class="{active: tool==='bg'}" @click="tool='bg'">○ BG (B)</button>
+          </div>
+          <div class="tool-row" style="margin-bottom:4px">
+            <button class="tbtn" :class="{active: samScope==='sync'}" @click="samScope='sync'">⟳ Sync</button>
+            <button class="tbtn" :class="{active: samScope==='solo'}" @click="samScope='solo'">◎ Solo</button>
+            <button class="tbtn" style="color:#da3633;border-color:#da3633" @click="clearPolygons">✕ Clear</button>
+          </div>
+          <div style="font-size:10px;color:#484f58;margin-bottom:5px;line-height:1.6">
+            <span :style="{color: samScope==='sync'?'#58a6ff':'#484f58'}">Sync</span> all years &nbsp;·&nbsp;
+            <span :style="{color: samScope==='solo'?'#58a6ff':'#484f58'}">Solo</span> current year only<br>
+            Clear: Sync removes all / Solo removes current year
+          </div>
+          <button class="tbtn" style="width:100%;margin-bottom:4px" @click="clearCurrentPoints">Clear points</button>
+          <div style="font-size:11px;color:#484f58">
+            Points: {{ currentPoints.length }}
+            <span v-if="activeInst?.polygon" style="color:#3fb950;margin-left:4px">✓ segmented</span>
+          </div>
+        </template>
+
+        <!-- 手动模式说明 -->
+        <template v-if="mainMode==='manual'">
+          <div style="font-size:11px;color:#8b949e;line-height:1.6">
+            Click to add vertex<br>
+            <span style="color:#f0883e">Dblclick</span> to close polygon<br>
+            <span style="color:#f85149">Esc</span> cancel current drawing
+          </div>
+          <div style="margin-top:6px;font-size:11px;color:#484f58">
+            Vertices: {{ manualPoints.length }}
+            <span v-if="manualPoints.length>=3" style="color:#f0883e"> (dblclick to close)</span>
+          </div>
+        </template>
+
+        <!-- 鼠标模式说明 -->
+        <template v-if="mainMode==='mouse'">
+          <div style="font-size:11px;color:#8b949e;line-height:1.6">
+            <span style="color:#3fb950">Left click</span> to add vertex<br>
+            <span style="color:#f85149">Right click</span> to delete vertex<br>
+            <span style="color:#3fb950">Drag</span> to move vertex
+          </div>
+        </template>
+
+        <div style="margin-top:6px;font-size:11px;color:#484f58">
+          Active: <span style="color:#f0883e">{{ activeInstId || 'None' }}</span>
+        </div>
+      </div>
+
+
+      <hr class="divider">
+
+      <!-- Annotation Data -->
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div class="panel-label" style="margin-bottom:0">Annotation Data</div>
+          <button @click="copyAnnotation"
+                  style="background:#21262d;border:1px solid #30363d;color:#8b949e;
+                         border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer">
+            Copy
+          </button>
+        </div>
+        <pre style="background:#0d1117;border:1px solid #21262d;border-radius:6px;
+                    padding:8px;font-size:11px;color:#e6edf3;overflow:auto;
+                    height:120px;white-space:pre;font-family:monospace;line-height:1.5">{{ annotationJson }}</pre>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Note -->
+      <div>
+        <div class="panel-label">Note</div>
+        <textarea class="note-area" v-model="note" placeholder="Add notes..."></textarea>
+      </div>
+
+      <hr class="divider">
+
+      <!-- 操作（固定在底部） -->
+      <div style="display:flex;flex-direction:column;gap:5px;position:sticky;bottom:0;background:#161b22;padding-top:8px;border-top:1px solid #21262d">
+        <!-- Validate -->
+        <div>
+          <div class="panel-label" style="margin-bottom:4px">Validate-Result</div>
+          <div class="vbtn-row">
+            <button class="vbtn yes" :class="{active:result==='yes'}" @click="result=(result==='yes'?'':'yes'); nextTick(autoSave)">Yes</button>
+            <button class="vbtn no" :class="{active:result==='no'}" @click="result=(result==='no'?'':'no'); nextTick(autoSave)">No</button>
+            <button class="vbtn unk" :class="{active:result==='unknown'}" @click="result=(result==='unknown'?'':'unknown'); nextTick(autoSave)">Unk</button>
+          </div>
+        </div>
+        <div class="action-row">
+          <button class="abtn abtn-save" @click="saveAnnotation">💾 Save (S)</button>
+          <button class="abtn abtn-skip" @click="skipCell">Skip</button>
+        </div>
+        <div class="nav-row">
+          <button class="nbtn" @click="prevCell">← Prev</button>
+          <button class="nbtn" @click="nextCellNav">Next →</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, computed, reactive, watch, nextTick, onMounted, onUnmounted } = Vue;
+
+function getCsrf() {
+  const m = document.cookie.match(/csrftoken=([^;]+)/);
+  return m ? m[1] : '';
+}
+function postJson(url, body) {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+    body: JSON.stringify(body),
+  });
+}
+
+const RTS_COLORS = ['#3fb950','#f0883e','#58a6ff','#ff7b72','#d2a8ff','#ffa657'];
+
+createApp({
+  setup() {
+    const years = [2019, 2020, 2021, 2022, 2023, 2024];
+    const opacity = ref(0.7);
+    const showPolygons = ref(true);
+    const fillPolygons = ref(false);
+    const showNir = ref(false);
+    const hoverEnabled = ref(true);
+    const tool = ref('fg');
+    const editMode = ref(false);
+    const activeYear = ref(2019);
+    const result = ref('');
+    const note = ref('');
+    const jumpInput = ref('');
+    const segmenting = ref(false);
+    const gifUrl = ref('');
+    const mainMode = ref('sam');  // 'sam' | 'manual' | 'mouse'
+    const manualPoints = ref([]);  // 手动绘制的顶点
+    const samScope = ref('sync'); // 'sync' | 'solo'
+    const currentUser = ref(window._USER_EMAIL || '');
+    const infoTool = ref(false);
+    const infoPanel = reactive({ show: false, inst: null, year: null, area: 0, note: '', x: 8, y: 8 });
+
+    // ---- 缩放/平移 ----
+    const zoomLevel = ref(1.0);
+    const zoomLocked = ref(false);
+    const panX = ref(0), panY = ref(0);
+
+    function zoomAtCenter(newZoom) {
+      const area = bigArea.value;
+      if (!area) { zoomLevel.value = newZoom; redraw(); return; }
+      const mx = area.clientWidth / 2, my = area.clientHeight / 2;
+      const t = getImgTransform();
+      if (t) {
+        const imgX = (mx - t.offX) / t.scale;
+        const imgY = (my - t.offY) / t.scale;
+        const aw = area.clientWidth, ah = area.clientHeight;
+        const baseScale = Math.min(aw / t.nw, ah / t.nh);
+        const newScale = baseScale * newZoom;
+        panX.value = mx - (aw - t.nw * newScale) / 2 - imgX * newScale;
+        panY.value = my - (ah - t.nh * newScale) / 2 - imgY * newScale;
+      }
+      zoomLevel.value = newZoom;
+      redraw();
+    }
+    function zoomIn()    { zoomAtCenter(Math.min(8, +(zoomLevel.value + 0.25).toFixed(2))); }
+    function zoomOut()   { zoomAtCenter(Math.max(0.25, +(zoomLevel.value - 0.25).toFixed(2))); }
+    function zoomReset() { zoomLevel.value = 1.0; panX.value = 0; panY.value = 0; redraw(); }
+
+    function onWheel(e) {
+      const area = bigArea.value;
+      if (!area) return;
+      const rect = area.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      // 触控板：pinch 手势浏览器会合成 ctrlKey=true
+      // 触控板双指滑动：deltaMode=0 且 |deltaY| 较小（< 50）
+      // 鼠标滚轮：deltaMode=1（行单位）或 deltaMode=0 但 |deltaY| 较大
+      const isTrackpadScroll = !e.ctrlKey && !e.metaKey
+                                && e.deltaMode === 0
+                                && Math.abs(e.deltaY) < 50;
+
+      function doZoom(dy, sensitivity) {
+        const delta = -dy * sensitivity;
+        const oldZoom = zoomLevel.value;
+        const newZoom = Math.min(8, Math.max(0.25, +(oldZoom + delta * oldZoom).toFixed(3)));
+        const t = getImgTransform();
+        if (t) {
+          const imgX = (mx - t.offX) / t.scale;
+          const imgY = (my - t.offY) / t.scale;
+          const aw = area.clientWidth, ah = area.clientHeight;
+          const baseScale = Math.min(aw / t.nw, ah / t.nh);
+          const newScale = baseScale * newZoom;
+          panX.value = mx - (aw - t.nw * newScale) / 2 - imgX * newScale;
+          panY.value = my - (ah - t.nh * newScale) / 2 - imgY * newScale;
+        }
+        zoomLevel.value = newZoom;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        // 触控板 pinch 缩放 / Ctrl+鼠标滚轮缩放
+        doZoom(e.deltaY, 0.008);
+      } else if (isTrackpadScroll) {
+        // 触控板双指滑动：平移
+        panX.value -= e.deltaX;
+        panY.value -= e.deltaY;
+      } else {
+        // 鼠标滚轮：以鼠标为中心缩放
+        doZoom(e.deltaY, 0.001);
+      }
+      redraw();
+    }
+
+    function updateInfoArea() {
+      if (!infoPanel.inst?.polygon) return;
+      const pixelArea = calcArea(infoPanel.inst.polygon);
+      infoPanel.area = (pixelArea * 100).toFixed(0);
+    }
+
+    function instArea(inst) {
+      return (calcArea(inst.polygon || []) * 100).toFixed(0);
+    }
+
+    // geotransform cache: key = `${prefix}_${year}` → [ox, pw, 0, oy, 0, ph]
+    const georefCache = reactive({});
+
+    async function fetchGeoref(prefix, year) {
+      if (!cellData.value) return;
+      const key = `${prefix}_${year}`;
+      if (georefCache[key]) return;
+      try {
+        const r = await fetch(`/api/georef/${cellData.value.cell_id}/${prefix}/${year}/`);
+        if (r.ok) {
+          const d = await r.json();
+          georefCache[key] = d.geotransform;
+        }
+      } catch {}
+    }
+
+    // EPSG:3413 (x,y meters) → WGS84 [lon, lat] 极地立体投影反变换
+    function epsg3413ToWgs84(x, y) {
+      const a = 6378137.0;
+      const e = 0.0818191908426;
+      const phi_c = 70 * Math.PI / 180;
+      const lam_0 = -45 * Math.PI / 180;
+      const sinPhi_c = Math.sin(phi_c);
+      const t_c = Math.tan(Math.PI / 4 - phi_c / 2) /
+                  Math.pow((1 - e * sinPhi_c) / (1 + e * sinPhi_c), e / 2);
+      const m_c = Math.cos(phi_c) / Math.sqrt(1 - e * e * sinPhi_c * sinPhi_c);
+      const rho = Math.sqrt(x * x + y * y);
+      if (rho === 0) return [lam_0 * 180 / Math.PI, 90];
+      const t = rho * t_c / (a * m_c);
+      let phi = Math.PI / 2 - 2 * Math.atan(t);
+      for (let i = 0; i < 10; i++) {
+        const s = Math.sin(phi);
+        phi = Math.PI / 2 - 2 * Math.atan(t * Math.pow((1 - e * s) / (1 + e * s), e / 2));
+      }
+      const lam = lam_0 + Math.atan2(x, -y);
+      return [+(lam * 180 / Math.PI).toFixed(7), +(phi * 180 / Math.PI).toFixed(7)];
+    }
+
+    // 像素坐标 [col, row] → [lon, lat]，需要 geotransform
+    function pixelToLonLat(col, row, gt) {
+      const mx = gt[0] + col * gt[1] + row * gt[2];
+      const my = gt[3] + col * gt[4] + row * gt[5];
+      return epsg3413ToWgs84(mx, my);
+    }
+
+    const annotationJson = computed(() => {
+      const prefix = showNir.value ? 's2nir' : 's2';
+      const year = activeYear.value;
+      const gt = georefCache[`${prefix}_${year}`];
+      const list = (instances[year] || []).filter(i => i.polygon?.length);
+      if (!list.length) return '{}';
+
+      const features = list.map(inst => {
+        let coords;
+        if (gt) {
+          coords = inst.polygon.map(([c, r]) => pixelToLonLat(c, r, gt));
+          coords.push(coords[0]); // GeoJSON 闭合
+        } else {
+          coords = inst.polygon.map(([c, r]) => [c, r]);
+        }
+        return {
+          type: 'Feature',
+          properties: { id: inst.id, year },
+          geometry: { type: 'Polygon', coordinates: [coords] },
+        };
+      });
+
+      if (!gt) fetchGeoref(prefix, year);
+
+      return JSON.stringify({ type: 'FeatureCollection', features }, null, 2);
+    });
+
+    function copyAnnotation() {
+      navigator.clipboard.writeText(annotationJson.value).catch(() => {});
+    }
+
+    // 切换年份/NIR时预取 georef
+    watch([activeYear, showNir], ([y, nir]) => {
+      fetchGeoref(nir ? 's2nir' : 's2', y);
+    });
+
+    function showInstCard(inst, year) {
+      infoPanel.inst = inst;
+      infoPanel.year = year;
+      infoPanel.area = (calcArea(inst.polygon || []) * 100).toFixed(0);
+      infoPanel.note = inst.note || '';
+      infoPanel.show = true;
+      // 展开当前实例，折叠其他
+      (currentInstances.value || []).forEach(i => { i._collapsed = (i.id !== inst.id); });
+    }
+
+    function confirmInstById(id) {
+      pushUndo();
+      years.forEach(y => {
+        const found = (instances[y] || []).find(i => i.id === id);
+        if (found) found.confirmed = true;
+      });
+      result.value = 'yes';
+      activeInstId.value = null;
+      redraw();
+      autoSave();
+    }
+
+    function confirmInst() {
+      if (!infoPanel.inst) return;
+      confirmInstById(infoPanel.inst.id);
+    }
+
+    function deleteInstById(id) {
+      pushUndo();
+      removeInstance(id, true);
+      nextTick(autoSave);
+    }
+
+    function deleteInst() {
+      if (!infoPanel.inst) return;
+      deleteInstById(infoPanel.inst.id);
+    }
+    let cardDrag = null;
+
+    function startDragCard(e) {
+      cardDrag = { startX: e.clientX - infoPanel.x, startY: e.clientY - infoPanel.y };
+      const onMove = (ev) => {
+        infoPanel.x = ev.clientX - cardDrag.startX;
+        infoPanel.y = ev.clientY - cardDrag.startY;
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        cardDrag = null;
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
+
+    function setMode(mode) {
+      mainMode.value = mode;
+      editMode.value = (mode === 'mouse');
+      infoTool.value = (mode === 'mouse');
+      manualPoints.value = [];
+      hoverPolygon.value = null;
+      redraw();
+    }
+
+    const cellData = ref(null);
+    const stats = reactive({ total: 0, annotated: 0, skipped: 0, yes: 0, no: 0, unknown: 0, pending: 0 });
+
+    // instances[year] = [{id:'rts01', color:'#3fb950', polygon:[[x,y],...], points:[{x,y,label}]}]
+    const instances = reactive({});
+    const activeInstId = ref(null);
+
+    // ---- undo/redo ----
+    const _undoStack = [];
+    const _redoStack = [];
+    const _undoCount = ref(0);
+    const _redoCount = ref(0);
+
+    function _snapshot() {
+      const snap = {};
+      years.forEach(y => {
+        snap[y] = JSON.parse(JSON.stringify(instances[y] || []));
+      });
+      return snap;
+    }
+
+    function pushUndo() {
+      _undoStack.push(_snapshot());
+      if (_undoStack.length > 30) _undoStack.shift();
+      _redoStack.length = 0;
+      _undoCount.value = _undoStack.length;
+      _redoCount.value = 0;
+    }
+
+    function undo() {
+      if (!_undoStack.length) return;
+      _redoStack.push(_snapshot());
+      const snap = _undoStack.pop();
+      years.forEach(y => { instances[y] = snap[y] || []; });
+      _undoCount.value = _undoStack.length;
+      _redoCount.value = _redoStack.length;
+      redraw();
+    }
+
+    function redo() {
+      if (!_redoStack.length) return;
+      _undoStack.push(_snapshot());
+      const snap = _redoStack.pop();
+      years.forEach(y => { instances[y] = snap[y] || []; });
+      _undoCount.value = _undoStack.length;
+      _redoCount.value = _redoStack.length;
+      redraw();
+    }
+
+    const canUndo = computed(() => _undoCount.value > 0);
+    const canRedo = computed(() => _redoCount.value > 0);
+
+    // hover preview
+    const hoverPolygon = ref(null);
+    const crosshair = reactive({ x: -1, y: -1 }); // SAM模式十字参考线（canvas坐标）
+    let hoverTimer = null;
+    let lastHoverPos = null;
+    const hoveredPointIdx = ref(-1);  // 鼠标悬停的点位索引
+
+    // edit mode drag state
+    const dragState = reactive({ active: false, vertIdx: -1, instId: null, moveAll: false, lastX: 0, lastY: 0 });
+    const dragPoint = reactive({ active: false, idx: -1 }); // SAM提示点拖动
+
+    // Shoelace公式计算多边形像素面积
+    function calcArea(polygon) {
+      if (!polygon || polygon.length < 3) return 0;
+      let area = 0;
+      const n = polygon.length;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += polygon[i][0] * polygon[j][1];
+        area -= polygon[j][0] * polygon[i][1];
+      }
+      return Math.abs(area) / 2;
+    }
+
+    // 点是否在多边形内（Ray casting）
+    function pointInPolygon(x, y, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i][0], yi = polygon[i][1];
+        const xj = polygon[j][0], yj = polygon[j][1];
+        if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+          inside = !inside;
+        }
+      }
+      return inside;
+    }
+
+    const bigImg = ref(null);
+    const bigCanvas = ref(null);
+    const bigArea = ref(null);
+    const thumbCanvases = reactive({});
+
+    const progressPct = computed(() => {
+      if (!stats.total) return 0;
+      return (((stats.yes||0)+(stats.no||0)+(stats.unknown||0)+(stats.skipped||0)) / stats.total * 100).toFixed(1);
+    });
+
+    const currentInstances = computed(() => instances[activeYear.value] || []);
+
+    const activeInst = computed(() => {
+      const list = instances[activeYear.value] || [];
+      return list.find(i => i.id === activeInstId.value) || null;
+    });
+
+    const currentPoints = computed(() => activeInst.value?.points || []);
+
+    function instanceCount(year) {
+      return (instances[year] || []).filter(i => i.polygon).length;
+    }
+
+    function getUrl(year) {
+      if (!cellData.value) return '';
+      const imgs = cellData.value.images[year];
+      if (!imgs) return '';
+      return showNir.value && imgs.nir ? imgs.nir : (imgs.s2 || '');
+    }
+
+    // ---- 坐标转换 ----
+    function getImgTransform() {
+      const img = bigImg.value;
+      if (!img || !img.naturalWidth) return null;
+      const area = bigArea.value;
+      const aw = area.clientWidth, ah = area.clientHeight;
+      const nw = img.naturalWidth, nh = img.naturalHeight;
+      const baseScale = Math.min(aw / nw, ah / nh);
+      const scale = baseScale * zoomLevel.value;
+      const dispW = nw * scale, dispH = nh * scale;
+      const offX = (aw - dispW) / 2 + panX.value;
+      const offY = (ah - dispH) / 2 + panY.value;
+      return { scale, offX, offY, nw, nh };
+    }
+
+    function clientToImg(clientX, clientY) {
+      const area = bigArea.value;
+      if (!area) return null;
+      const rect = area.getBoundingClientRect();
+      const t = getImgTransform();
+      if (!t) return null;
+      const px = Math.round((clientX - rect.left - t.offX) / t.scale);
+      const py = Math.round((clientY - rect.top - t.offY) / t.scale);
+      if (px < 0 || py < 0 || px > t.nw || py > t.nh) return null;
+      return { x: px, y: py };
+    }
+
+    // ---- Canvas redraw ----
+    function redrawThumb(year) {
+      const canvas = thumbCanvases[year];
+      if (!canvas) return;
+      const list = instances[year] || [];
+      // 找到canvas对应的img元素（父节点的img）
+      const img = canvas.parentElement?.querySelector('img');
+      if (!img || !img.naturalWidth) return;
+      const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
+      canvas.width = cw; canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, cw, ch);
+      if (!list.length) return;
+      const nw = img.naturalWidth, nh = img.naturalHeight;
+      const scale = Math.min(cw / nw, ch / nh);
+      const offX = (cw - nw * scale) / 2, offY = (ch - nh * scale) / 2;
+      list.forEach(inst => {
+        if (!inst.polygon || inst.polygon.length < 3) return;
+        ctx.beginPath();
+        const [sx, sy] = [offX + inst.polygon[0][0]*scale, offY + inst.polygon[0][1]*scale];
+        ctx.moveTo(sx, sy);
+        for (let i = 1; i < inst.polygon.length; i++) {
+          ctx.lineTo(offX + inst.polygon[i][0]*scale, offY + inst.polygon[i][1]*scale);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = inst.color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        if (inst.confirmed) {
+          ctx.fillStyle = inst.color + '44';
+          ctx.fill();
+        }
+      });
+    }
+
+    function redrawAllThumbs() {
+      years.forEach(y => redrawThumb(y));
+    }
+
+    function redraw() {
+      const canvas = bigCanvas.value;
+      const img = bigImg.value;
+      const area = bigArea.value;
+      if (!canvas || !img || !area) return;
+      const t = getImgTransform();
+      if (!t) return;
+
+      canvas.width = area.clientWidth;
+      canvas.height = area.clientHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 将图片画在canvas上（支持缩放/平移）
+      if (img.complete && img.naturalWidth) {
+        ctx.drawImage(img, t.offX, t.offY, t.nw * t.scale, t.nh * t.scale);
+      }
+
+      const toC = (x, y) => [t.offX + x * t.scale, t.offY + y * t.scale];
+
+      const year = activeYear.value;
+      const list = instances[year] || [];
+
+      // 画所有实例的polygon
+      if (showPolygons.value) {
+        list.forEach(inst => {
+          if (!inst.polygon || inst.polygon.length < 3) return;
+          const isActive = inst.id === activeInstId.value;
+          ctx.beginPath();
+          const [sx, sy] = toC(inst.polygon[0][0], inst.polygon[0][1]);
+          ctx.moveTo(sx, sy);
+          for (let i = 1; i < inst.polygon.length; i++) {
+            const [cx2, cy2] = toC(inst.polygon[i][0], inst.polygon[i][1]);
+            ctx.lineTo(cx2, cy2);
+          }
+          ctx.closePath();
+          if (fillPolygons.value) {
+            ctx.fillStyle = inst.color + Math.round(opacity.value * 255 * 0.35).toString(16).padStart(2,'0');
+            ctx.fill();
+          }
+          ctx.strokeStyle = inst.color;
+          ctx.lineWidth = isActive ? 2.5 : 2.0;
+          // 已确认：实线；未确认激活：实线；未确认非激活：细虚线（仍可见）
+          ctx.setLineDash(inst.confirmed ? [] : (isActive ? [] : [6, 2]));
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // 已确认：右上角显示✓
+          const [lx, ly] = toC(inst.polygon[0][0], inst.polygon[0][1]);
+          ctx.fillStyle = inst.color;
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillText(inst.id + (inst.confirmed ? ' ✓' : ''), lx + 4, ly - 4);
+
+          // 编辑模式 或 鼠标模式：画顶点
+          if ((editMode.value || mainMode.value === 'mouse') && isActive) {
+            inst.polygon.forEach((pt, vi) => {
+              const [vx, vy] = toC(pt[0], pt[1]);
+              const isHoveredVert = mainMode.value === 'mouse' && hoveredPointIdx.value === vi;
+              ctx.beginPath();
+              ctx.arc(vx, vy, isHoveredVert ? 7 : 5, 0, Math.PI * 2);
+              ctx.fillStyle = isHoveredVert ? '#da3633' : (dragState.active && dragState.vertIdx === vi ? '#f0883e' : inst.color);
+              ctx.fill();
+              ctx.strokeStyle = 'white';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            });
+          }
+        });
+      }
+
+      // 手动绘制预览
+      if (mainMode.value === 'manual' && manualPoints.value.length > 0) {
+        ctx.beginPath();
+        const [sx, sy] = toC(manualPoints.value[0][0], manualPoints.value[0][1]);
+        ctx.moveTo(sx, sy);
+        for (let i = 1; i < manualPoints.value.length; i++) {
+          const [mx, my] = toC(manualPoints.value[i][0], manualPoints.value[i][1]);
+          ctx.lineTo(mx, my);
+        }
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = '#f0883e';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        manualPoints.value.forEach(pt => {
+          const [mx, my] = toC(pt[0], pt[1]);
+          ctx.beginPath();
+          ctx.arc(mx, my, 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#f0883e';
+          ctx.fill();
+        });
+      }
+
+      // hover预览（虚线）— 仅SAM模式显示
+      if (mainMode.value === 'sam' && hoverPolygon.value && hoverPolygon.value.length > 2) {
+        ctx.beginPath();
+        const [sx, sy] = toC(hoverPolygon.value[0][0], hoverPolygon.value[0][1]);
+        ctx.moveTo(sx, sy);
+        for (let i = 1; i < hoverPolygon.value.length; i++) {
+          const [cx2, cy2] = toC(hoverPolygon.value[i][0], hoverPolygon.value[i][1]);
+          ctx.lineTo(cx2, cy2);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255,30,30,0.52)';
+        ctx.fill();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // 提示点：简单小圆点，可拖动
+      list.forEach(instItem => {
+        if (!instItem.points?.length) return;
+        const isActiveInst = instItem.id === activeInstId.value;
+        instItem.points.forEach((pt, i) => {
+          const [cx2, cy2] = toC(pt.x, pt.y);
+          const isHovered = isActiveInst && hoveredPointIdx.value === i;
+          const isDragging = isActiveInst && dragPoint.active && dragPoint.idx === i;
+          const radius = (isHovered || isDragging) ? 6 : 4;
+          const alpha = isActiveInst ? 1 : 0.4;
+          ctx.beginPath();
+          ctx.arc(cx2, cy2, radius, 0, Math.PI * 2);
+          ctx.fillStyle = pt.label === 1
+            ? `rgba(63,185,80,${alpha})`
+            : `rgba(248,81,73,${alpha})`;
+          ctx.fill();
+        });
+      });
+      // SAM模式十字参考线
+      if (mainMode.value === 'sam' && crosshair.x >= 0) {
+        ctx.save();
+        ctx.setLineDash([6, 5]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(crosshair.x, 0); ctx.lineTo(crosshair.x, canvas.height);
+        ctx.moveTo(0, crosshair.y); ctx.lineTo(canvas.width, crosshair.y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 同步更新所有缩略图
+      redrawAllThumbs();
+    }
+
+    function onBigLoad() { nextTick(redraw); }
+
+    // ---- 悬停预览 ----
+    function onMouseMove(e) {
+      // SAM模式：更新十字参考线位置
+      if (mainMode.value === 'sam') {
+        const area = bigArea.value;
+        if (area) {
+          const rect = area.getBoundingClientRect();
+          crosshair.x = e.clientX - rect.left;
+          crosshair.y = e.clientY - rect.top;
+          redraw();
+        }
+      } else {
+        crosshair.x = -1; crosshair.y = -1;
+      }
+      // SAM点拖动中
+      if (dragPoint.active) {
+        const inst = activeInst.value;
+        const pos = clientToImg(e.clientX, e.clientY);
+        if (inst && pos) {
+          inst.points[dragPoint.idx] = { ...inst.points[dragPoint.idx], x: pos.x, y: pos.y };
+          redraw();
+          // 拖动时防抖触发SAM（500ms）
+          clearTimeout(dragPoint._timer);
+          dragPoint._timer = setTimeout(() => {
+            if (dragPoint.active && inst.points?.length) runSegAllYears(inst);
+          }, 500);
+        }
+        return;
+      }
+      // 检测鼠标悬停折点（edit模式和mouse模式都需要）
+      const inst = activeInst.value;
+      const t = getImgTransform();
+      const area2 = bigArea.value;
+      if (t && area2 && inst) {
+        const rect2 = area2.getBoundingClientRect();
+        const cx = e.clientX - rect2.left;
+        const cy = e.clientY - rect2.top;
+        const THRESH = 10;
+        let found = -1;
+        if ((editMode.value || mainMode.value === 'mouse') && inst.polygon?.length) {
+          inst.polygon.forEach(([px, py], i) => {
+            const dx = t.offX + px * t.scale - cx;
+            const dy = t.offY + py * t.scale - cy;
+            if (Math.sqrt(dx*dx+dy*dy) < THRESH) found = i;
+          });
+        } else if (inst.points?.length) {
+          inst.points.forEach((pt, i) => {
+            const dx = t.offX + pt.x * t.scale - cx;
+            const dy = t.offY + pt.y * t.scale - cy;
+            if (Math.sqrt(dx*dx+dy*dy) < THRESH) found = i;
+          });
+        }
+        hoveredPointIdx.value = found;
+        if (found >= 0) redraw();
+      } else {
+        hoveredPointIdx.value = -1;
+      }
+
+      if (editMode.value) {
+        if (dragState.active) handleDrag(e);
+        return;
+      }
+
+      if (!hoverEnabled.value || !cellData.value) return;
+      // 已有点击点后不再预览
+      if (activeInst.value?.points?.length) return;
+      const pos = clientToImg(e.clientX, e.clientY);
+      if (!pos) {
+        clearTimeout(hoverTimer);
+        hoverPolygon.value = null;
+        redraw();
+        return;
+      }
+      lastHoverPos = pos;
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => fetchHover(pos), 120);
+    }
+
+    let _hoverAbort = null;
+
+    async function fetchHover(pos) {
+      if (!cellData.value) return;
+      // 取消上一个还未完成的 hover 请求
+      if (_hoverAbort) _hoverAbort.abort();
+      _hoverAbort = new AbortController();
+      const signal = _hoverAbort.signal;
+      const params = new URLSearchParams({
+        cell_id: cellData.value.cell_id,
+        year: activeYear.value,
+        x: pos.x, y: pos.y,
+        prefix: showNir.value ? 's2nir' : 's2',
+      });
+      try {
+        const r = await fetch('/api/hover/?' + params, { signal });
+        const d = await r.json();
+        // 请求完成时检查鼠标是否还在图片上、且没有点击点
+        if (!activeInst.value?.points?.length) {
+          hoverPolygon.value = d.polygon;
+          redraw();
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          hoverPolygon.value = null;
+          redraw();
+        }
+      }
+    }
+
+    function onMouseLeave() {
+      clearTimeout(hoverTimer);
+      hoverPolygon.value = null;
+      crosshair.x = -1; crosshair.y = -1;
+      redraw();
+    }
+
+    // ---- 点击 ----
+    let _pointDragged = false; // 防止拖动后触发click添加新点
+    let _clickTimer = null;    // 防止双击时添加点
+    async function onBigClick(e) {
+      if (!cellData.value) return;
+      if (_pointDragged) { _pointDragged = false; return; }
+
+      // SAM模式：延迟执行，双击时取消
+      if (mainMode.value === 'sam') {
+        clearTimeout(_clickTimer);
+        const _e = e;
+        _clickTimer = setTimeout(() => { _handleSamClick(_e); }, 220);
+        return;
+      }
+
+      const pos = clientToImg(e.clientX, e.clientY);
+      if (!pos) return;
+
+      // 手动模式：添加顶点
+      if (mainMode.value === 'manual') {
+        manualPoints.value.push([pos.x, pos.y]);
+        redraw();
+        return;
+      }
+
+      // 编辑模式：左击边线插入折点
+      if (editMode.value) {
+        const inst = activeInst.value;
+        if (!inst?.polygon) return;
+        const t = getImgTransform();
+        if (!t) return;
+        const area = bigArea.value;
+        const rect = area.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        // 先判断是否点中折点（点中则是拖动，不插入）
+        const THRESH = 10;
+        const onVert = inst.polygon.some(([px, py]) => {
+          return Math.hypot(t.offX + px * t.scale - cx, t.offY + py * t.scale - cy) < THRESH;
+        });
+        if (onVert) return;
+        // 检测是否点击在边线上
+        const EDGE_THRESH = 8;
+        let bestEdge = -1, bestDist = Infinity;
+        for (let i = 0; i < inst.polygon.length; i++) {
+          const j = (i + 1) % inst.polygon.length;
+          const [ax, ay] = [t.offX + inst.polygon[i][0]*t.scale, t.offY + inst.polygon[i][1]*t.scale];
+          const [bx, by] = [t.offX + inst.polygon[j][0]*t.scale, t.offY + inst.polygon[j][1]*t.scale];
+          const d = pointToSegDist(cx, cy, ax, ay, bx, by);
+          if (d < EDGE_THRESH && d < bestDist) { bestDist = d; bestEdge = j; }
+        }
+        if (bestEdge >= 0) {
+          inst.polygon.splice(bestEdge, 0, [pos.x, pos.y]);
+          redraw();
+        }
+        return;
+      }
+
+      // 鼠标模式：点击已分割区域显示信息
+      if (mainMode.value === 'mouse') {
+        const list = instances[activeYear.value] || [];
+        for (const inst of list) {
+          if (inst.polygon && pointInPolygon(pos.x, pos.y, inst.polygon)) {
+            const pixelArea = calcArea(inst.polygon);
+            const s2PixelSize = 10;
+            infoPanel.show = true;
+            infoPanel.inst = inst;
+            infoPanel.year = activeYear.value;
+            infoPanel.area = (pixelArea * s2PixelSize * s2PixelSize).toFixed(0);
+            infoPanel.note = inst.note || '';
+            infoPanel.x = 8;
+            infoPanel.y = 8;
+            activeInstId.value = inst.id;  // 激活该实例，显示折点
+            redraw();
+            return;
+          }
+        }
+        // 点击空白区域：不关闭任务卡，保持当前状态
+        return;
+      }
+
+    }
+
+    async function _handleSamClick(e) {
+      if (!cellData.value) return;
+      const pos = clientToImg(e.clientX, e.clientY);
+      if (!pos) return;
+      pushUndo();  // 每次点击记一次，覆盖新建实例和分割结果
+      if (!activeInstId.value) addInstance(true, false);
+      const inst = activeInst.value;
+      if (!inst) return;
+      if (!inst.points) inst.points = [];
+      const isBg = tool.value !== 'fg';
+      inst.points.push({ x: pos.x, y: pos.y, label: isBg ? 0 : 1 });
+      hoverPolygon.value = null;
+      redraw();
+      if (inst.confirmed || samScope.value === 'solo') {
+        // 已确认 or Solo模式：只更新当前年份
+        segmenting.value = true;
+        await runSeg(inst, activeYear.value, activeYear.value);
+        segmenting.value = false;
+        showInstCard(inst, activeYear.value);
+      } else {
+        // Sync模式（默认）：全6个年份同步更新
+        runSegAllYears(inst);
+      }
+    }
+
+    // hintYear: 用哪个年份的缓存 mask 作为参考（服务端缓存，不传数据）
+    async function runSeg(inst, yearOverride, hintYear = null) {
+      if (!cellData.value || !inst.points?.length) return;
+      const year = yearOverride ?? activeYear.value;
+      segmenting.value = true;
+      try {
+        const body = {
+          cell_id: cellData.value.cell_id,
+          year,
+          points: inst.points.map(p => [p.x, p.y]),
+          labels: inst.points.map(p => p.label),
+          prefix: showNir.value ? 's2nir' : 's2',
+          rts_id: inst.id,
+        };
+        if (hintYear !== null) body.hint_year = hintYear;
+        const r = await postJson('/api/segment/', body);
+        const d = await r.json();
+        if (d.polygon) {
+          inst.polygon = d.polygon;
+          // 面积为0且未确认时自动删除
+          if (calcArea(d.polygon) === 0 && !inst.confirmed) removeInstance(inst.id);
+        }
+      } finally {
+        if (!yearOverride) segmenting.value = false;
+        await nextTick();
+        redraw();
+      }
+    }
+
+    async function runSegAllYears(inst) {
+      if (!cellData.value || !inst.points?.length) return;
+      segmenting.value = true;
+      try {
+        // 当前年份先跑，结果存入服务端缓存
+        await runSeg(inst, activeYear.value);
+
+        // 其他年份并行跑，用当前年份的缓存 mask 作为参考
+        const refYear = activeYear.value;
+        const otherYears = years.filter(y => y !== refYear);
+        await Promise.all(otherYears.map(async y => {
+          if (!instances[y]) instances[y] = [];
+          let otherInst = instances[y].find(i => i.id === inst.id);
+          if (!otherInst) {
+            otherInst = { id: inst.id, color: inst.color, polygon: null, points: [...inst.points] };
+            instances[y].push(otherInst);
+          } else {
+            otherInst.points = [...inst.points];
+          }
+          await runSeg(otherInst, y, refYear);
+        }));
+      } finally {
+        segmenting.value = false;
+        redraw();
+      }
+      showInstCard(inst, activeYear.value);
+    }
+
+    // ---- 编辑节点 / SAM点拖动 ----
+    function onMouseDown(e) {
+      const inst = activeInst.value;
+      const t = getImgTransform();
+      if (!t || !inst) return;
+      const area = bigArea.value;
+      const rect = area.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const THRESH = 12;
+
+      // SAM模式：检测是否按下在提示点上，允许拖动
+      if (mainMode.value === 'sam' && inst.points?.length) {
+        let minDist = Infinity, minIdx = -1;
+        inst.points.forEach((pt, i) => {
+          const dx = t.offX + pt.x * t.scale - cx;
+          const dy = t.offY + pt.y * t.scale - cy;
+          const d = Math.sqrt(dx*dx+dy*dy);
+          if (d < THRESH && d < minDist) { minDist = d; minIdx = i; }
+        });
+        if (minIdx >= 0) {
+          dragPoint.active = true;
+          dragPoint.idx = minIdx;
+          e.preventDefault();
+          return;
+        }
+      }
+
+      // 编辑模式：拖动多边形顶点
+      if (!editMode.value) return;
+      if (!inst?.polygon) return;
+
+      let minDist = Infinity, minIdx = -1;
+      inst.polygon.forEach(([px, py], i) => {
+        const dx = t.offX + px * t.scale - cx;
+        const dy = t.offY + py * t.scale - cy;
+        const d = Math.sqrt(dx*dx+dy*dy);
+        if (d < THRESH && d < minDist) { minDist = d; minIdx = i; }
+      });
+
+      if (minIdx >= 0) {
+        dragState.active = true;
+        dragState.vertIdx = minIdx;
+        dragState.moveAll = false;
+        dragState.instId = inst.id;
+        e.preventDefault();
+        return;
+      }
+
+      // 点击在多边形内部：整体拖动
+      const imgPos = clientToImg(cx + rect.left - rect.left, cy + rect.top - rect.top);
+      const clickPos = clientToImg(e.clientX, e.clientY);
+      if (clickPos && pointInPolygon(clickPos.x, clickPos.y, inst.polygon)) {
+        dragState.active = true;
+        dragState.vertIdx = -1;
+        dragState.moveAll = true;
+        dragState.instId = inst.id;
+        dragState.lastX = clickPos.x;
+        dragState.lastY = clickPos.y;
+        e.preventDefault();
+      }
+    }
+
+    function handleDrag(e) {
+      if (!dragState.active) return;
+      const inst = instances[activeYear.value]?.find(i => i.id === dragState.instId);
+      if (!inst?.polygon) return;
+      const pos = clientToImg(e.clientX, e.clientY);
+      if (!pos) return;
+      if (dragState.moveAll) {
+        // 整体平移所有顶点
+        const dx = pos.x - dragState.lastX;
+        const dy = pos.y - dragState.lastY;
+        inst.polygon = inst.polygon.map(([px, py]) => [px + dx, py + dy]);
+        dragState.lastX = pos.x;
+        dragState.lastY = pos.y;
+      } else {
+        inst.polygon[dragState.vertIdx] = [pos.x, pos.y];
+      }
+      redraw();
+    }
+
+    function onMouseUp(e) {
+      if (dragPoint.active) {
+        clearTimeout(dragPoint._timer);
+        dragPoint.active = false;
+        const wasDragging = dragPoint.idx >= 0;
+        dragPoint.idx = -1;
+        if (wasDragging) {
+          _pointDragged = true;
+          const inst = activeInst.value;
+          if (inst?.points?.length) {
+            // 已确认实例：只跑当前年份
+            if (inst.confirmed) {
+              segmenting.value = true;
+              runSeg(inst, activeYear.value).then(() => { segmenting.value = false; showInstCard(inst, activeYear.value); });
+            } else {
+              runSegAllYears(inst);
+            }
+          }
+        }
+        return;
+      }
+      if (dragState.active) {
+        dragState.active = false;
+        dragState.vertIdx = -1;
+      }
+    }
+
+    function onDblClick(e) {
+      // 取消SAM单击延迟，防止双击时添加点
+      clearTimeout(_clickTimer);
+      // 手动模式：双击闭合多边形
+      if (mainMode.value === 'manual') {
+        if (manualPoints.value.length < 3) return;
+        pushUndo();
+        if (!activeInstId.value) addInstance(false, false);
+        const inst = activeInst.value;
+        if (inst) {
+          inst.polygon = [...manualPoints.value];
+          inst.points = [];
+          manualPoints.value = [];
+          redraw();
+          // 手动模式：弹出任务卡，等用户确认
+          showInstCard(inst, activeYear.value);
+        }
+        return;
+      }
+      // SAM/手动模式：双击图片自动切换鼠标模式并激活折点
+      // mouse模式：双击其他实例切换 active
+      {
+        const pos = clientToImg(e.clientX, e.clientY);
+        if (pos) {
+          const list = instances[activeYear.value] || [];
+          for (const it of list) {
+            if (it.polygon && pointInPolygon(pos.x, pos.y, it.polygon)) {
+              if (mainMode.value !== 'mouse') setMode('mouse');
+              activeInstId.value = it.id;
+              showInstCard(it, activeYear.value);
+              redraw();
+              return;
+            }
+          }
+        }
+        if (mainMode.value !== 'mouse') return;
+      }
+      const inst = activeInst.value;
+      if (!inst?.polygon) return;
+      const t = getImgTransform();
+      if (!t) return;
+      const area = bigArea.value;
+      const rect = area.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+
+      // 双击顶点 → 删除
+      const THRESH = 10;
+      let minIdx = -1, minDist = Infinity;
+      inst.polygon.forEach(([px, py], i) => {
+        const dx = t.offX + px * t.scale - cx;
+        const dy = t.offY + py * t.scale - cy;
+        const d = Math.sqrt(dx*dx+dy*dy);
+        if (d < THRESH && d < minDist) { minDist = d; minIdx = i; }
+      });
+
+      if (minIdx >= 0 && inst.polygon.length > 3) {
+        inst.polygon.splice(minIdx, 1);
+        redraw();
+        return;
+      }
+
+      // 双击边线 → 插入顶点
+      const EDGE_THRESH = 8;
+      let bestEdge = -1, bestDist = Infinity;
+      for (let i = 0; i < inst.polygon.length; i++) {
+        const j = (i + 1) % inst.polygon.length;
+        const [ax, ay] = [t.offX + inst.polygon[i][0]*t.scale, t.offY + inst.polygon[i][1]*t.scale];
+        const [bx, by] = [t.offX + inst.polygon[j][0]*t.scale, t.offY + inst.polygon[j][1]*t.scale];
+        const d = pointToSegDist(cx, cy, ax, ay, bx, by);
+        if (d < EDGE_THRESH && d < bestDist) { bestDist = d; bestEdge = j; }
+      }
+      if (bestEdge >= 0) {
+        const pos = clientToImg(e.clientX, e.clientY);
+        if (pos) inst.polygon.splice(bestEdge, 0, [pos.x, pos.y]);
+        redraw();
+      }
+    }
+
+    // 编辑模式右击：删除悬停折点
+    function onRightClick(e) {
+      if (!editMode.value) return;
+      const inst = activeInst.value;
+      if (!inst?.polygon) return;
+      if (hoveredPointIdx.value >= 0 && inst.polygon.length > 3) {
+        inst.polygon.splice(hoveredPointIdx.value, 1);
+        hoveredPointIdx.value = -1;
+        redraw();
+      }
+    }
+
+    function pointToSegDist(px, py, ax, ay, bx, by) {
+      const dx = bx-ax, dy = by-ay;
+      const len2 = dx*dx+dy*dy;
+      if (len2 === 0) return Math.hypot(px-ax, py-ay);
+      const t = Math.max(0, Math.min(1, ((px-ax)*dx+(py-ay)*dy)/len2));
+      return Math.hypot(px-(ax+t*dx), py-(ay+t*dy));
+    }
+
+    // ---- 实例管理 ----
+    function addInstance(allYears = true, recordUndo = true) {
+      if (recordUndo) pushUndo();
+      const year = activeYear.value;
+      if (!instances[year]) instances[year] = [];
+      const idx = instances[year].length;
+      const id = `rts${String(idx+1).padStart(2,'0')}`;
+      const color = RTS_COLORS[idx % RTS_COLORS.length];
+      if (allYears) {
+        // SAM3模式：所有年份都添加该空实例，切换年份不会丢失
+        years.forEach(y => {
+          if (!instances[y]) instances[y] = [];
+          if (!instances[y].find(i => i.id === id)) {
+            instances[y].push({ id, color, polygon: null, points: [] });
+          }
+        });
+      } else {
+        // 手动/鼠标模式：只在当前年份添加
+        instances[year].push({ id, color, polygon: null, points: [] });
+      }
+      activeInstId.value = id;
+      redraw();
+    }
+
+    function removeInstance(instId, force = false) {
+      const instObj = (instances[activeYear.value] || []).find(i => i.id === instId);
+      const isConfirmed = instObj?.confirmed;
+      // 已确认的实例不允许自动删除，只允许手动强制删除
+      if (isConfirmed && !force) return;
+
+      if (isConfirmed) {
+        // 已确认：只删当前年份
+        const list = instances[activeYear.value] || [];
+        const idx = list.findIndex(i => i.id === instId);
+        if (idx >= 0) list.splice(idx, 1);
+      } else {
+        // 未确认：删除所有年份
+        years.forEach(y => {
+          if (!instances[y]) return;
+          const idx = instances[y].findIndex(i => i.id === instId);
+          if (idx >= 0) instances[y].splice(idx, 1);
+        });
+      }
+
+      // 删除后不重新编号，保持其他实例 ID 稳定
+      const baseList = instances[activeYear.value] || [];
+      if (activeInstId.value === instId) {
+        activeInstId.value = null;
+      } else if (!baseList.find(i => i.id === activeInstId.value)) {
+        activeInstId.value = null;
+      }
+      redraw();
+    }
+
+    function clearPolygons() {
+      pushUndo();
+      if (samScope.value === 'sync') {
+        years.forEach(y => { instances[y] = []; });
+        activeInstId.value = null;
+      } else {
+        instances[activeYear.value] = [];
+        const list = instances[activeYear.value] || [];
+        if (!list.find(i => i.id === activeInstId.value)) activeInstId.value = null;
+      }
+      redraw();
+    }
+
+    function clearCurrentPoints() {
+      const inst = activeInst.value;
+      if (!inst) return;
+      inst.points = [];
+      inst.polygon = null;
+      redraw();
+    }
+
+    // ---- 加载格网 ----
+    async function loadCell(cellId) {
+      cellData.value = null;
+      result.value = '';
+      note.value = '';
+      gifUrl.value = '';
+      hoverPolygon.value = null;
+      years.forEach(y => { instances[y] = []; });
+      activeInstId.value = null;
+
+      const r = await fetch(`/api/cells/${cellId}/`);
+      const d = await r.json();
+      cellData.value = d;
+      Object.assign(stats, d.stats);
+      result.value = d.result || '';
+      note.value = d.note || '';
+      if (d.gif_url) gifUrl.value = d.gif_url;
+
+      // 恢复已保存的标注（list of instances per year）
+      years.forEach(y => {
+        const saved = d.annotations[y];
+        if (saved && Array.isArray(saved)) {
+          instances[y] = saved.map((inst, i) => ({
+            ...inst,
+            color: RTS_COLORS[i % RTS_COLORS.length],
+            points: []
+          }));
+        } else {
+          instances[y] = [];
+        }
+      });
+
+      // 自动选中第一个实例或新建
+      const firstInsts = instances[activeYear.value];
+      activeInstId.value = firstInsts[0]?.id || null;
+
+      await nextTick();
+      redraw();
+
+      // 预加载下一个格网的图片（后台静默加载，不影响当前操作）
+      if (d.next) preloadCell(d.next);
+    }
+
+    function preloadCell(cellId) {
+      years.forEach(y => {
+        const img = new Image();
+        img.src = `/api/image/${cellId}/s2/${y}/`;
+      });
+    }
+
+    async function loadFirst() {
+      const r = await fetch('/api/cells/?status=pending&page=1');
+      const d = await r.json();
+      // 优先恢复上次的 cell
+      if (d.last_cell) {
+        await loadCell(d.last_cell);
+        return;
+      }
+      if (d.cells.length) await loadCell(d.cells[0].cell_id);
+      else {
+        const r2 = await fetch('/api/cells/?page=1');
+        const d2 = await r2.json();
+        if (d2.cells.length) await loadCell(d2.cells[0].cell_id);
+      }
+    }
+
+    async function reloadCell() {
+      if (cellData.value) await loadCell(cellData.value.cell_id);
+    }
+
+    let _saving = false;
+    async function _doSave() {
+      if (!cellData.value) return null;
+      if (_saving) return null;
+      _saving = true;
+      const annots = {};
+      years.forEach(y => {
+        const list = (instances[y] || []).filter(i => i.polygon);
+        if (list.length) annots[y] = list.map(({ id, polygon, confirmed }) => ({ id, polygon, confirmed: !!confirmed }));
+      });
+      const hasConfirmed = years.some(y => (instances[y] || []).some(i => i.confirmed));
+      const action = (!hasConfirmed && !result.value) ? 'skipped' : 'annotated';
+      try {
+        const r = await postJson('/api/save/', {
+            cell_id: cellData.value.cell_id,
+            annotations: annots,
+            result: result.value,
+            note: note.value,
+            action,
+        });
+        if (!r.ok) { console.error('[save] HTTP', r.status, await r.text()); return null; }
+        const d = await r.json();
+        if (d.stats) Object.assign(stats, d.stats);
+        return d;
+      } catch(e) {
+        console.error('[save] error', e);
+        return null;
+      } finally {
+        _saving = false;
+      }
+    }
+
+    async function saveAnnotation() {
+      await _doSave();  // 只保存，不跳转
+    }
+
+    async function autoSave() {
+      await _doSave();  // 仅保存，不跳转
+    }
+
+    async function skipCell() {
+      if (!cellData.value) return;
+      const r = await postJson('/api/save/', { cell_id: cellData.value.cell_id, annotations: {}, action: 'skipped', result: result.value, note: note.value });
+      const d = await r.json();
+      if (d.stats) Object.assign(stats, d.stats);
+      if (d.next) await loadCell(d.next);
+    }
+
+    function _clearResultIfNoPolygon() {
+      if (result.value === 'no' || result.value === 'unknown') return;
+      const hasAny = years.some(y => (instances[y] || []).some(i => i.polygon));
+      if (!hasAny) result.value = '';
+    }
+
+    async function prevCell() {
+      const target = cellData.value?.prev;
+      if (!target) return;
+      _clearResultIfNoPolygon();
+      await _doSave();
+      try { const d = await fetch('/api/stats/').then(r=>r.json()); Object.assign(stats, d); } catch{}
+      await loadCell(target);
+    }
+    async function nextCellNav() {
+      const target = cellData.value?.next_pending || cellData.value?.next;
+      if (!target) return;
+      _clearResultIfNoPolygon();
+      await _doSave();
+      try { const d = await fetch('/api/stats/').then(r=>r.json()); Object.assign(stats, d); } catch{}
+      await loadCell(target);
+    }
+
+    async function jumpTo() {
+      const idx = parseInt(jumpInput.value) - 1;
+      if (isNaN(idx) || idx < 0) return;
+      const r = await fetch(`/api/cells/?page=${Math.floor(idx/50)+1}`);
+      const d = await r.json();
+      const cell = d.cells[idx % 50];
+      if (cell) await loadCell(cell.cell_id);
+    }
+
+    watch([showPolygons, fillPolygons, opacity, editMode, activeInstId], redraw);
+    watch(activeYear, () => {
+      hoverPolygon.value = null;
+      if (!zoomLocked.value) { zoomLevel.value = 1.0; panX.value = 0; panY.value = 0; }
+      const list = instances[activeYear.value] || [];
+      if (mainMode.value === 'mouse') {
+        activeInstId.value = null;
+      } else if (!list.find(i => i.id === activeInstId.value)) {
+        activeInstId.value = list[0]?.id || null;
+      }
+      nextTick(redraw);
+    });
+    watch(showNir, () => nextTick(redraw));
+
+    function onKey(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'Enter') {
+        if (infoPanel.show) { confirmInst(); return; }
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (mainMode.value === 'mouse') {
+          const inst = activeInst.value;
+          if (!inst) return;
+          if (hoveredPointIdx.value >= 0 && inst.polygon) {
+            // 鼠标悬停在折点上：删除该折点
+            inst.polygon.splice(hoveredPointIdx.value, 1);
+            hoveredPointIdx.value = -1;
+            if (inst.polygon.length < 3) inst.polygon = null;
+            redraw(); redrawAllThumbs();
+          } else {
+            // 鼠标在范围内：删除整个RTS实例
+            deleteInst();
+          }
+          return;
+        }
+        // SAM模式：Delete删除悬停的提示点
+        const inst = activeInst.value;
+        if (inst?.points && hoveredPointIdx.value >= 0) {
+          inst.points.splice(hoveredPointIdx.value, 1);
+          hoveredPointIdx.value = -1;
+          if (inst.points.length > 0) runSegAllYears(inst);
+          else { inst.polygon = null; redraw(); }
+        }
+        return;
+      }
+      if (e.key === 'Escape') { manualPoints.value = []; infoPanel.show = false; redraw(); return; }
+      if (e.key === 'f' || e.key === 'F') { setMode('sam'); tool.value = 'fg'; }
+      if (e.key === 'b' || e.key === 'B') { setMode('sam'); tool.value = 'bg'; }
+      if (e.key === 'e' || e.key === 'E') editMode.value = !editMode.value;
+      if (e.key === 's' || e.key === 'S') saveAnnotation();
+      if (e.key === ' ') { e.preventDefault(); skipCell(); }
+      if (e.key === 'ArrowRight') nextCellNav();
+      if (e.key === 'ArrowLeft') prevCell();
+      if (e.key === 'n' || e.key === 'N') addInstance();
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Z')) { e.preventDefault(); redo(); }
+      if (e.key >= '1' && e.key <= '6') activeYear.value = years[parseInt(e.key)-1];
+    }
+
+    let _resizeObserver = null;
+    onMounted(async () => {
+      await loadFirst();
+      document.addEventListener('keydown', onKey);
+      // 监听容器大小变化自动重绘
+      _resizeObserver = new ResizeObserver(() => redraw());
+      if (bigArea.value) _resizeObserver.observe(bigArea.value);
+    });
+    onUnmounted(() => {
+      document.removeEventListener('keydown', onKey);
+      if (_resizeObserver) _resizeObserver.disconnect();
+    });
+
+    return {
+      years, opacity, showPolygons, fillPolygons, showNir, hoverEnabled,
+      tool, editMode, activeYear, result, note, jumpInput, segmenting, gifUrl,
+      cellData, stats, instances, activeInstId, activeInst, currentInstances, currentPoints,
+      bigImg, bigCanvas, bigArea, progressPct,
+      infoTool, infoPanel, mainMode, manualPoints, setMode,
+      instArea, annotationJson, copyAnnotation, confirmInstById, deleteInstById,
+      confirmInst, deleteInst, showInstCard, updateInfoArea,
+      zoomLevel, zoomLocked, zoomIn, zoomOut, zoomReset, onWheel,
+      thumbCanvases, redrawThumb, redrawAllThumbs,
+      getUrl, instanceCount, onBigLoad,
+      onMouseMove, onMouseLeave, onMouseDown, onMouseUp, onBigClick, onDblClick, onRightClick,
+      addInstance, removeInstance, clearCurrentPoints, clearPolygons,
+      samScope, currentUser,
+      reloadCell, saveAnnotation, autoSave, skipCell, prevCell, nextCellNav, jumpTo,
+      undo, redo, canUndo, canRedo,
+    };
+  }
+}).mount('#app');
+</script>
+</html>{% endverbatim %}
