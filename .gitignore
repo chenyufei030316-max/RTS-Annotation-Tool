@@ -8,3 +8,8 @@ sam3_info/._____temp
 __pycache__/
 *.pyc
 .DS_Store
+__pycache__/
+*.pyc
+*.pyo
+sam3_info/.msc
+sam3_info/._____temp
