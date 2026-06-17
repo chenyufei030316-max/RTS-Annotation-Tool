@@ -276,7 +276,7 @@ body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMac
               🖱 Mouse — click region / drag vertex / dblclick to delete
             </template>
             <template v-else>
-              🤖 SAM — {{ tool==='fg' ? 'FG point' : 'BG point' }} &nbsp;|&nbsp; F=FG B=BG S=Save Space=Skip
+              🤖 SAM — {{ tool==='fg' ? 'Include point' : 'Exclude point' }} &nbsp;|&nbsp; F=Include B=Exclude S=Save Space=Skip
             </template>
           </div>
         </div>
@@ -368,7 +368,7 @@ body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMac
         <div class="stat-row">
           <div class="stat-chip yes"><span class="num">{{ stats.yes||0 }}</span><span class="lbl">Yes</span></div>
           <div class="stat-chip no"><span class="num">{{ stats.no||0 }}</span><span class="lbl">No</span></div>
-          <div class="stat-chip unk"><span class="num">{{ stats.unknown||0 }}</span><span class="lbl">Unk</span></div>
+          <div class="stat-chip unk"><span class="num">{{ stats.unknown||0 }}</span><span class="lbl">Unknown</span></div>
         </div>
         <div style="font-size:10px;color:#484f58;margin-top:3px;text-align:center">Total {{ stats.total }} · Skipped {{ stats.skipped }}</div>
       </div>
@@ -378,16 +378,16 @@ body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMac
       <!-- 年份状态 -->
       <div>
         <div style="font-size:11px;font-family:monospace;color:#8b949e;margin-bottom:6px;word-break:break-all">{{ cellData ? cellData.cell_id : '' }}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px">
+        <div style="display:flex;flex-direction:column;gap:3px">
           <div v-for="year in years" :key="year"
                class="year-item"
                :class="{active: activeYear===year}"
                @click="activeYear=year">
             <span :style="{color: activeYear===year ? '#58a6ff' : '#8b949e', flexShrink:0}">{{ year }}</span>
             <span style="font-size:10px;margin-left:4px">
-              <template v-if="instanceCount(year)>0">
-                <span v-for="inst in (instances[year]||[]).filter(i=>i.polygon)" :key="inst.id"
-                      :style="{color: inst.color, marginLeft:'2px'}">{{ inst.id }}</span>
+              <template v-if="(instances[year]||[]).filter(i=>i.polygon).length>0">
+                <span v-for="(inst, idx) in (instances[year]||[]).filter(i=>i.polygon)" :key="inst.id"
+                      :style="{color: inst.color, marginLeft:'2px'}">{{ idx===0 ? inst.id : ','+inst.id.replace(/^[a-zA-Z]+/,'') }}</span>
               </template>
               <span v-else style="color:#484f58">—</span>
             </span>
@@ -415,18 +415,16 @@ body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMac
         <!-- SAM3子工具 -->
         <template v-if="mainMode==='sam'">
           <div class="tool-row" style="margin-bottom:5px">
-            <button class="tbtn" :class="{active: tool==='fg'}" @click="tool='fg'">● FG (F)</button>
-            <button class="tbtn" :class="{active: tool==='bg'}" @click="tool='bg'">○ BG (B)</button>
+            <button class="tbtn" :class="{active: tool==='fg'}" @click="tool='fg'">● Include (F)</button>
+            <button class="tbtn" :class="{active: tool==='bg'}" @click="tool='bg'">○ Exclude (B)</button>
           </div>
           <div class="tool-row" style="margin-bottom:4px">
-            <button class="tbtn" :class="{active: samScope==='sync'}" @click="samScope='sync'">⟳ Sync</button>
-            <button class="tbtn" :class="{active: samScope==='solo'}" @click="samScope='solo'">◎ Solo</button>
+            <button class="tbtn" :class="{active: samScope==='sync'}" @click="samScope='sync'">⟳ All Years</button>
+            <button class="tbtn" :class="{active: samScope==='solo'}" @click="samScope='solo'">◎ This Year</button>
             <button class="tbtn" style="color:#da3633;border-color:#da3633" @click="clearPolygons">✕ Clear</button>
           </div>
           <div style="font-size:10px;color:#484f58;margin-bottom:5px;line-height:1.6">
-            <span :style="{color: samScope==='sync'?'#58a6ff':'#484f58'}">Sync</span> all years &nbsp;·&nbsp;
-            <span :style="{color: samScope==='solo'?'#58a6ff':'#484f58'}">Solo</span> current year only<br>
-            Clear: Sync removes all / Solo removes current year
+            Clear: All Years removes all / This Year removes current
           </div>
           <button class="tbtn" style="width:100%;margin-bottom:4px" @click="clearCurrentPoints">Clear points</button>
           <div style="font-size:11px;color:#484f58">
@@ -498,7 +496,7 @@ body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMac
           <div class="vbtn-row">
             <button class="vbtn yes" :class="{active:result==='yes'}" @click="result=(result==='yes'?'':'yes'); nextTick(autoSave)">Yes</button>
             <button class="vbtn no" :class="{active:result==='no'}" @click="result=(result==='no'?'':'no'); nextTick(autoSave)">No</button>
-            <button class="vbtn unk" :class="{active:result==='unknown'}" @click="result=(result==='unknown'?'':'unknown'); nextTick(autoSave)">Unk</button>
+            <button class="vbtn unk" :class="{active:result==='unknown'}" @click="result=(result==='unknown'?'':'unknown'); nextTick(autoSave)">Unknown</button>
           </div>
         </div>
         <div class="action-row">
