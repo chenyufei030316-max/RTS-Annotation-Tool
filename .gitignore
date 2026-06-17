@@ -1,0 +1,10 @@
+db.sqlite3
+login_history.json
+allowed_emails.json
+server.log
+annotations/
+sam3_info/.msc
+sam3_info/._____temp
+__pycache__/
+*.pyc
+.DS_Store
